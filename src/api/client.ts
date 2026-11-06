@@ -161,6 +161,37 @@ export function signOut(): void {
   persist(null)
 }
 
+export interface SubscriptionPreview {
+  name: string
+  site_url: string
+  traffic_used: number
+  traffic_total: number
+  expire_at: string | null
+}
+
+/// Health check that does not need a session; used by the "test" buttons.
+export async function pingServer(rawBase: string): Promise<void> {
+  const baseUrl = normalizeBase(rawBase)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 6000)
+  try {
+    const response = await fetch(`${baseUrl}/healthz`, { signal: controller.signal })
+    if (!response.ok) throw new ApiError(response.status, 'health_failed')
+  } catch (error) {
+    if (error instanceof ApiError) throw error
+    throw new ApiError(0, 'unreachable')
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+export function previewSubscription(url: string): Promise<SubscriptionPreview> {
+  return request<SubscriptionPreview>('/api/v1/subscriptions/preview', {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  })
+}
+
 export function listSubscriptions(): Promise<Subscription[]> {
   return request<Subscription[]>('/api/v1/subscriptions')
 }

@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { ApiError, lastServer, login, register } from '../api/client'
+import { ApiError, lastServer, login, pingServer, register } from '../api/client'
 
 const router = useRouter()
 const message = useMessage()
@@ -12,6 +12,8 @@ const server = ref(lastServer())
 const username = ref('')
 const password = ref('')
 const loading = ref(false)
+const testing = ref(false)
+const reachable = ref<'unknown' | 'ok' | 'fail'>('unknown')
 
 const isRegister = computed(() => mode.value === 'register')
 
@@ -33,6 +35,25 @@ function humanize(error: unknown): string {
 
 function switchMode(): void {
   mode.value = isRegister.value ? 'login' : 'register'
+}
+
+async function testServer(): Promise<void> {
+  if (!server.value.trim()) {
+    message.warning('先填服务器地址')
+    return
+  }
+  testing.value = true
+  reachable.value = 'unknown'
+  try {
+    await pingServer(server.value)
+    reachable.value = 'ok'
+    message.success('服务器可达')
+  } catch {
+    reachable.value = 'fail'
+    message.error('连不上：检查地址、端口和防火墙')
+  } finally {
+    testing.value = false
+  }
 }
 
 async function submit(): Promise<void> {
@@ -84,6 +105,15 @@ async function submit(): Promise<void> {
             :input-props="{ autocapitalize: 'off', autocomplete: 'url' }"
             @keyup.enter="submit"
           />
+          <div class="field__row">
+            <n-button size="tiny" quaternary :loading="testing" @click="testServer">
+              测试连接
+            </n-button>
+            <span v-if="reachable === 'ok'" class="field__hint field__hint--ok">可达</span>
+            <span v-else-if="reachable === 'fail'" class="field__hint field__hint--bad">
+              不可达
+            </span>
+          </div>
         </label>
         <label class="field">
           <span class="field__label">账号</span>

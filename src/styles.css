@@ -314,6 +314,24 @@ a {
   gap: 6px;
 }
 
+.field__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.field__hint {
+  font-size: 12px;
+}
+
+.field__hint--ok {
+  color: #4ade80;
+}
+
+.field__hint--bad {
+  color: #f87171;
+}
+
 .field__label {
   font-size: 12px;
   color: #8a97ab;

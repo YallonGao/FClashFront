@@ -7,6 +7,7 @@ import {
   createSubscription,
   deleteSubscription,
   listSubscriptions,
+  previewSubscription,
   refreshSubscription,
   updateSubscription,
 } from '../api/client'
@@ -25,6 +26,8 @@ const editorOpen = ref(false)
 const editingId = ref<string | null>(null)
 const revealed = ref<Record<string, boolean>>({})
 const refreshing = ref<Record<string, boolean>>({})
+const importUrl = ref('')
+const importing = ref(false)
 const query = ref('')
 const statusFilter = ref<'all' | 'ok' | 'expiring' | 'expired' | 'off'>('all')
 const sortBy = ref<'added' | 'expiry' | 'name'>('added')
@@ -157,6 +160,49 @@ async function load(): Promise<void> {
     message.error(humanize(error))
   } finally {
     loading.value = false
+  }
+}
+
+async function importFromLink(): Promise<void> {
+  const url = (importUrl.value || form.url).trim()
+  if (!url) {
+    message.warning('先粘贴订阅链接')
+    return
+  }
+  importing.value = true
+  try {
+    const preview = await previewSubscription(url)
+    form.url = url
+    if (preview.name) form.name = preview.name
+    if (preview.site_url) form.site_url = preview.site_url
+    if (preview.traffic_total) {
+      form.usedGb = Number((preview.traffic_used / GIB).toFixed(2))
+      form.totalGb = Number((preview.traffic_total / GIB).toFixed(2))
+    }
+    if (preview.expire_at) {
+      form.expireAt = toLocalMidnight(preview.expire_at)
+    }
+    message.success('已从链接读取')
+  } catch (error) {
+    const detail = error instanceof ApiError ? error.detail : ''
+    message.error(previewMessage(detail))
+  } finally {
+    importing.value = false
+  }
+}
+
+function previewMessage(detail: string): string {
+  switch (detail) {
+    case 'invalid_url':
+      return '链接格式不对，需要 http:// 或 https:// 开头'
+    case 'blocked_address':
+      return '链接指向内网地址，服务器拒绝访问'
+    case 'unresolvable_host':
+      return '域名解析不了'
+    case 'fetch_failed':
+      return '连不上机场服务器'
+    default:
+      return detail ? `读取失败（${detail}）` : '读取失败'
   }
 }
 
@@ -485,6 +531,18 @@ onMounted(load)
       style="width: min(560px, 92vw)"
     >
       <div class="form-grid">
+        <label class="field">
+          <span class="field__label">从订阅链接导入</span>
+          <div class="field__row">
+            <n-input
+              v-model:value="importUrl"
+              placeholder="粘贴 http(s) 链接，自动填名称、流量、到期"
+              @keyup.enter="importFromLink"
+            />
+            <n-button :loading="importing" @click="importFromLink">读取</n-button>
+          </div>
+        </label>
+
         <label class="field">
           <span class="field__label">名称</span>
           <n-input v-model:value="form.name" placeholder="例如：XX云" />

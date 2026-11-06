@@ -13,7 +13,11 @@ if (-not (Test-Path "node_modules")) {
 }
 
 Write-Host ""
+$address = (Get-NetIPAddress -AddressFamily IPv4 |
+    Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } |
+    Select-Object -First 1).IPAddress
 Write-Host "  Console  http://localhost:$Port" -ForegroundColor Green
+if ($address) { Write-Host "  LAN      http://$address`:$Port" -ForegroundColor Yellow }
 Write-Host "  API      proxied to http://127.0.0.1:8780 (start FClashBack first)" -ForegroundColor DarkGray
 Write-Host ""
 

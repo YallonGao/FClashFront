@@ -7,6 +7,8 @@ export default defineConfig({
   base: './',
   plugins: [vue()],
   server: {
+    // Bind every interface so a phone on the same network can open the console.
+    host: true,
     port: 5180,
     proxy: {
       '/api': 'http://127.0.0.1:8780',
