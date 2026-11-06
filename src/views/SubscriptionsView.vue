@@ -7,6 +7,7 @@ import {
   createSubscription,
   deleteSubscription,
   listSubscriptions,
+  refreshSubscription,
   updateSubscription,
 } from '../api/client'
 import type { Subscription } from '../api/types'
@@ -23,6 +24,24 @@ const saving = ref(false)
 const editorOpen = ref(false)
 const editingId = ref<string | null>(null)
 const revealed = ref<Record<string, boolean>>({})
+const refreshing = ref<Record<string, boolean>>({})
+const query = ref('')
+const statusFilter = ref<'all' | 'ok' | 'expiring' | 'expired' | 'off'>('all')
+const sortBy = ref<'added' | 'expiry' | 'name'>('added')
+
+const statusOptions = [
+  { label: '全部', value: 'all' },
+  { label: '正常', value: 'ok' },
+  { label: '7 天内到期', value: 'expiring' },
+  { label: '已过期', value: 'expired' },
+  { label: '已停用', value: 'off' },
+]
+
+const sortOptions = [
+  { label: '最近添加', value: 'added' },
+  { label: '到期最近', value: 'expiry' },
+  { label: '名称', value: 'name' },
+]
 
 const form = reactive({
   name: '',
@@ -51,6 +70,71 @@ const stats = computed(() => {
     }).length,
   }
 })
+
+const visible = computed(() => {
+  const needle = query.value.trim().toLowerCase()
+  const rows = items.value.filter((item) => {
+    if (needle) {
+      const haystack = `${item.name} ${item.site_url} ${item.account} ${item.note}`.toLowerCase()
+      if (!haystack.includes(needle)) return false
+    }
+    const left = daysLeft(item)
+    switch (statusFilter.value) {
+      case 'off':
+        return !item.enabled
+      case 'expired':
+        return left !== null && left < 0
+      case 'expiring':
+        return left !== null && left >= 0 && left <= 7
+      case 'ok':
+        return item.enabled && (left === null || left > 7)
+      default:
+        return true
+    }
+  })
+  return [...rows].sort((a, b) => {
+    if (sortBy.value === 'name') return a.name.localeCompare(b.name, 'zh-CN')
+    if (sortBy.value === 'expiry') {
+      const av = a.expire_at ? new Date(a.expire_at).getTime() : Number.MAX_SAFE_INTEGER
+      const bv = b.expire_at ? new Date(b.expire_at).getTime() : Number.MAX_SAFE_INTEGER
+      return av - bv
+    }
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  })
+})
+
+async function refreshOne(item: Subscription): Promise<void> {
+  refreshing.value = { ...refreshing.value, [item.id]: true }
+  try {
+    const updated = await refreshSubscription(item.id)
+    items.value = items.value.map((row) => (row.id === updated.id ? updated : row))
+    message.success('已同步机场数据')
+  } catch (error) {
+    const detail = error instanceof ApiError ? error.detail : ''
+    message.error(refreshMessage(detail))
+  } finally {
+    const next = { ...refreshing.value }
+    delete next[item.id]
+    refreshing.value = next
+  }
+}
+
+function refreshMessage(detail: string): string {
+  switch (detail) {
+    case 'no_url':
+      return '这条订阅没有填链接'
+    case 'blocked_address':
+      return '链接指向内网地址，服务器拒绝访问'
+    case 'no_userinfo':
+      return '机场没有返回流量信息'
+    case 'unresolvable_host':
+      return '域名解析不了'
+    case 'fetch_failed':
+      return '连不上机场服务器'
+    default:
+      return detail ? `刷新失败（${detail}）` : '刷新失败'
+  }
+}
 
 function humanize(error: unknown): string {
   if (error instanceof ApiError) {
@@ -279,6 +363,17 @@ onMounted(load)
       </div>
     </div>
 
+    <div class="toolbar">
+      <n-input
+        v-model:value="query"
+        clearable
+        placeholder="搜索名称、官网、机场账号"
+        class="toolbar__search"
+      />
+      <n-select v-model:value="statusFilter" :options="statusOptions" class="toolbar__filter" />
+      <n-select v-model:value="sortBy" :options="sortOptions" class="toolbar__filter" />
+    </div>
+
     <div v-if="loading" style="padding: 56px; text-align: center">
       <n-spin size="large" />
     </div>
@@ -287,9 +382,13 @@ onMounted(load)
       还没有订阅。添加一个机场后，官网、账号、到期时间都会留在这里。
     </div>
 
+    <div v-else-if="!visible.length" class="empty">
+      没有匹配的订阅，换个关键词或筛选项试试。
+    </div>
+
     <div v-else class="grid">
       <article
-        v-for="item in items"
+        v-for="item in visible"
         :key="item.id"
         class="card"
         :class="{ 'card--off': !item.enabled }"
@@ -363,6 +462,15 @@ onMounted(load)
         <div class="card__foot">
           <span class="card__url mono muted">{{ shortHost(item.url) }}</span>
           <div class="card__actions">
+            <n-button
+              size="tiny"
+              quaternary
+              :loading="refreshing[item.id]"
+              :disabled="!item.url"
+              @click="refreshOne(item)"
+            >
+              刷新
+            </n-button>
             <n-button size="tiny" quaternary @click="openEdit(item)">编辑</n-button>
             <n-button size="tiny" quaternary type="error" @click="remove(item)">删除</n-button>
           </div>

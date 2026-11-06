@@ -140,6 +140,28 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
+.shell__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.toolbar__search {
+  flex: 1 1 240px;
+  min-width: 200px;
+}
+
+.toolbar__filter {
+  flex: 0 0 148px;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));

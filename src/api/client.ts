@@ -182,6 +182,20 @@ export function updateSubscription(
   })
 }
 
+export function refreshSubscription(id: string): Promise<Subscription> {
+  return request<Subscription>(`/api/v1/subscriptions/${id}/refresh`, { method: 'POST' })
+}
+
+export function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  return request<void>('/api/v1/auth/password', {
+    method: 'POST',
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  })
+}
+
 export function deleteSubscription(id: string): Promise<void> {
   return request<void>(`/api/v1/subscriptions/${id}`, { method: 'DELETE' })
 }
