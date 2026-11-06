@@ -116,9 +116,14 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   return (await response.json()) as T
 }
 
-export async function login(rawBase: string, username: string, password: string): Promise<void> {
+async function authenticate(
+  path: 'login' | 'register',
+  rawBase: string,
+  username: string,
+  password: string,
+): Promise<void> {
   const baseUrl = normalizeBase(rawBase)
-  const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
+  const response = await fetch(`${baseUrl}/api/v1/auth/${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -142,6 +147,14 @@ export async function login(rawBase: string, username: string, password: string)
     deviceKey: deviceKey(),
     deviceId: body.device.id,
   })
+}
+
+export function login(rawBase: string, username: string, password: string): Promise<void> {
+  return authenticate('login', rawBase, username, password)
+}
+
+export function register(rawBase: string, username: string, password: string): Promise<void> {
+  return authenticate('register', rawBase, username, password)
 }
 
 export function signOut(): void {
