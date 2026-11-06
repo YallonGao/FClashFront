@@ -38,18 +38,17 @@ const form = reactive({
 })
 
 const stats = computed(() => {
-  const now = Date.now()
   return {
     total: items.value.length,
     active: items.value.filter((item) => item.enabled).length,
     expiring: items.value.filter((item) => {
-      if (!item.expire_at) return false
-      const left = new Date(item.expire_at).getTime() - now
-      return left > 0 && left < 7 * DAY
+      const left = daysLeft(item)
+      return left !== null && left >= 0 && left <= 7
     }).length,
-    expired: items.value.filter(
-      (item) => item.expire_at !== null && new Date(item.expire_at).getTime() < now,
-    ).length,
+    expired: items.value.filter((item) => {
+      const left = daysLeft(item)
+      return left !== null && left < 0
+    }).length,
   }
 })
 
@@ -104,7 +103,7 @@ function openEdit(item: Subscription): void {
     password: item.password,
     note: item.note,
     enabled: item.enabled,
-    expireAt: item.expire_at ? new Date(item.expire_at).getTime() : null,
+    expireAt: item.expire_at ? toLocalMidnight(item.expire_at) : null,
     usedGb: Number((item.traffic_used / GIB).toFixed(2)),
     totalGb: Number((item.traffic_total / GIB).toFixed(2)),
   })
@@ -124,7 +123,7 @@ async function save(): Promise<void> {
     password: form.password,
     note: form.note.trim(),
     enabled: form.enabled,
-    expire_at: form.expireAt ? new Date(form.expireAt).toISOString() : null,
+    expire_at: form.expireAt ? utcDay(form.expireAt).toISOString() : null,
     traffic_used: Math.round(form.usedGb * GIB),
     traffic_total: Math.round(form.totalGb * GIB),
   }
@@ -183,23 +182,47 @@ function toggle(id: string): void {
 
 function statusOf(item: Subscription): { label: string; type: 'success' | 'warning' | 'error' | 'default' } {
   if (!item.enabled) return { label: '已停用', type: 'default' }
-  if (!item.expire_at) return { label: '正常', type: 'success' }
-  const left = new Date(item.expire_at).getTime() - Date.now()
+  const left = daysLeft(item)
+  if (left === null) return { label: '正常', type: 'success' }
   if (left < 0) return { label: '已过期', type: 'error' }
-  if (left < 7 * DAY) return { label: '即将到期', type: 'warning' }
+  if (left <= 7) return { label: '即将到期', type: 'warning' }
   return { label: '正常', type: 'success' }
+}
+
+/// Expiry is a calendar date, not an instant: store and render it as UTC
+/// midnight so the same subscription does not switch days across time zones.
+function utcDay(value: number): Date {
+  const local = new Date(value)
+  return new Date(Date.UTC(local.getFullYear(), local.getMonth(), local.getDate()))
+}
+
+function todayUtc(): number {
+  const now = new Date()
+  return Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
+}
+
+function daysLeft(item: Subscription): number | null {
+  if (!item.expire_at) return null
+  const target = new Date(item.expire_at)
+  const day = Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate())
+  return Math.round((day - todayUtc()) / DAY)
+}
+
+function toLocalMidnight(iso: string): number {
+  const date = new Date(iso)
+  return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()).getTime()
 }
 
 function formatDate(iso: string): string {
   const date = new Date(iso)
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
-    date.getDate(),
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(
+    date.getUTCDate(),
   ).padStart(2, '0')}`
 }
 
 function daysText(item: Subscription): string {
-  if (!item.expire_at) return ''
-  const days = Math.ceil((new Date(item.expire_at).getTime() - Date.now()) / DAY)
+  const days = daysLeft(item)
+  if (days === null) return ''
   return days >= 0 ? `剩 ${days} 天` : `已过期 ${-days} 天`
 }
 
